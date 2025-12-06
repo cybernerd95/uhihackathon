@@ -1,10 +1,9 @@
 import fs from "fs";
 import fetch from "node-fetch";
 
-// Path to your OCR .txt file
 const OCR_FILE_PATH = "D:/UHI API/sample/sample.jpg.txt";
 
-// Read OCR text from file
+// Read OCR
 function readOcrFile(filePath) {
   try {
     return fs.readFileSync(filePath, "utf8");
@@ -14,18 +13,15 @@ function readOcrFile(filePath) {
   }
 }
 
-// Safely parse JSON from model output
+// Safe JSON parse
 function safeJsonParse(input) {
-  // Remove code fences and junk
   let clean = input
     .replace(/```json/g, "")
     .replace(/```/g, "")
     .trim();
 
-  // Extract JSON block between first { and last }
   const start = clean.indexOf("{");
   const end = clean.lastIndexOf("}");
-
   if (start !== -1 && end !== -1) {
     clean = clean.substring(start, end + 1);
   }
@@ -33,7 +29,7 @@ function safeJsonParse(input) {
   try {
     return JSON.parse(clean);
   } catch (err) {
-    console.error("FAILED TO PARSE JSON AFTER CLEANING:\n", clean);
+    console.error("FAILED TO PARSE JSON:\n", clean);
     throw err;
   }
 }
@@ -41,19 +37,37 @@ function safeJsonParse(input) {
 export async function extractPrescription() {
   const rawOcrText = readOcrFile(OCR_FILE_PATH);
 
-  // Force model to output ONLY JSON
   const schema = `
-You MUST return ONLY raw JSON.
-No explanation. No comments. No extra text.
+You MUST output ONLY raw JSON.
+Do not add explanation text.
 
-If something is missing, leave it empty or null.
-Return EXACTLY this structure:
+IF MORE THAN ONE MEDICINE EXISTS:
+RETURN ONE OBJECT PER MEDICINE INSIDE "medications" ARRAY.
+DO NOT MERGE THEM.
+
+Auto-correct medicine name spelling when obvious.
+(Example: "Amolxylin" → "Amoxicillin")
+
+OUTPUT MUST EXACTLY MATCH THIS STRUCTURE:
 
 {
   "rawOcrText": "",
   "meds": {
     "current": {
       "medications": [
+        {
+          "name": "",
+          "dosage": "",
+          "frequency": "",
+          "route": "",
+          "duration": "",
+          "instructions": "",
+          "startDate": null,
+          "endDate": null,
+          "isCurrent": true,
+          "dispensedByStaffId": null,
+          "dispensedAt": null
+        },
         {
           "name": "",
           "dosage": "",
@@ -77,7 +91,7 @@ Return EXACTLY this structure:
   "status": "UNVERIFIED"
 }
 
-RESPONSE MUST START WITH '{' AND END WITH '}'.
+Response MUST start with "{" and end with "}".
 `;
 
   const prompt = `${schema}
@@ -87,29 +101,24 @@ Extract medication info from this OCR text:
 ${rawOcrText}
 `;
 
-  // Call Ollama
   const response = await fetch("http://localhost:11434/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "jsk/bio-mistral",
-      prompt: prompt,
+      prompt,
       stream: false,
       format: "json",
-      options: {
-        temperature: 0
-      }
+      options: { temperature: 0 }
     })
   });
 
   const data = await response.json();
-
   console.log("RAW MODEL RESPONSE:\n", data.response);
 
-  // Parse JSON
   let result = safeJsonParse(data.response);
 
-  // Inject raw OCR text
+  // Inject original OCR text
   result.rawOcrText = rawOcrText;
 
   return result;
