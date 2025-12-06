@@ -1,7 +1,7 @@
 import fs from "fs";
 import fetch from "node-fetch";
 
-const OCR_FILE_PATH = "D:/UHI API/sample/sample.jpg.txt";
+
 
 // Read OCR
 function readOcrFile(filePath) {
@@ -34,8 +34,8 @@ function safeJsonParse(input) {
   }
 }
 
-export async function extractPrescription() {
-  const rawOcrText = readOcrFile(OCR_FILE_PATH);
+export async function extractPrescription(filePath) {
+  const rawOcrText = readOcrFile(filePath);
 
   const schema = `
 You MUST output ONLY raw JSON.
@@ -47,7 +47,32 @@ DO NOT MERGE THEM.
 
 Auto-correct medicine name spelling when obvious.
 (Example: "Amolxylin" → "Amoxicillin")
+IMPORTANT FIELD RULES:
+- "name" MUST contain ONLY the medicine name (brand/generic).
+  Example: "Amoxicillin" (no dosage, no days, no instructions).
 
+- "dosage" MUST contain ONLY the strength or amount.
+  Example: "250 mg"
+
+- "frequency" MUST contain ONLY how often it is taken.
+  Example: "2 times daily"
+
+- "duration" MUST contain ONLY how long it is taken.
+  Example: "7 days"
+
+- "instructions" MUST contain ONLY timing or advice.
+  Examples:
+    - "before food"
+    - "after meals"
+    - "with water"
+
+DO NOT PUT duration or instructions inside the frequency field.
+Example:
+BAD: "2 times daily before food for 7 days"
+GOOD:
+  "frequency": "2 times daily",
+  "duration": "7 days",
+  "instructions": "before food"
 OUTPUT MUST EXACTLY MATCH THIS STRUCTURE:
 
 {
